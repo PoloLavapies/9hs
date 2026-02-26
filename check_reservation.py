@@ -9,7 +9,6 @@ import requests
 from playwright.async_api import async_playwright
 
 RESERVATION_URL = "https://reserva.be/ninehours_sleeplab"
-SOLD_OUT_TEXT = "満員のため、ご予約できません。"
 GIST_ID = "70f068d574416f9864dffa6c5c4b3ed3"
 GIST_FILENAME = "last_sent.json"
 
@@ -17,29 +16,46 @@ EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
-
 async def check_availability() -> bool:
     """Returns True if the slot is available (not sold out)."""
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = await browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            )
+        )
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        )
+        page = await context.new_page()
 
         await page.goto(RESERVATION_URL)
-
-        # Click the （男性）30代専用 link
-        await page.get_by_text("（男性）30代専用", exact=False).first.click()
-        await page.wait_for_load_state("networkidle")
-
-        content = await page.content()
+        # 「（男性）30代専用」を含む行の「予約する」ボタンをクリック
+        await page.locator(
+            "div.menu__outline",
+            has=page.locator("div.menu__outline__title", has_text="（男性）30代専用"),
+        ).locator("span", has_text="予約する").click()
+        await page.wait_for_load_state("networkidle") 
+        count = await page.locator(".userselect-date__list li").count()
         await browser.close()
 
-    return SOLD_OUT_TEXT not in content
+    return count > 0
 
 
-def get_last_sent() -> datetime | None:
+def get_last_sent():
     """Fetch last_sent datetime from Gist. Returns None if null or not set."""
     url = f"https://api.github.com/gists/{GIST_ID}"
-    response = requests.get(url, timeout=10)
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+    response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
 
     gist_data = response.json()
