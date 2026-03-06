@@ -41,8 +41,11 @@ async def check_availability() -> bool:
             "div.menu__outline",
             has=page.locator("div.menu__outline__title", has_text="（男性）30代専用"),
         ).locator("span", has_text="予約する").click()
-        await page.wait_for_load_state("networkidle") 
-        count = await page.locator(".userselect-date__list li").count()
+        try:
+            await page.wait_for_selector(".userselect-date__list", timeout=15000)
+            count = await page.locator(".userselect-date__list li").count()
+        except Exception:
+            count = 0
         await browser.close()
 
     return count > 0
