@@ -21,6 +21,7 @@ async def check_availability() -> bool:
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
+            channel="chrome",
             args=["--disable-blink-features=AutomationControlled"],
         )
         context = await browser.new_context(
@@ -41,6 +42,7 @@ async def check_availability() -> bool:
             "div.menu__outline",
             has=page.locator("div.menu__outline__title", has_text="（男性）30代専用"),
         ).locator("span", has_text="予約する").click()
+        await page.wait_for_load_state("domcontentloaded")
         try:
             await page.wait_for_selector(".userselect-date__list", timeout=15000)
             count = await page.locator(".userselect-date__list li").count()
